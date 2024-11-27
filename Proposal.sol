@@ -67,6 +67,8 @@ contract Proposal is Params {
     );
     event LogSetUnpassed(address indexed val, uint256 time);
 
+    event Initialized(uint256 timestamp, address[] validators);
+    
     modifier onlyValidator() {
         require(validators.isActiveValidator(msg.sender), "Validator only");
         _;
@@ -80,6 +82,8 @@ contract Proposal is Params {
             require(vals[i] != address(0), "Invalid validator address");
             pass[vals[i]] = true;
         }
+
+        emit Initialized(block.timestamp, vals);
 
         initialized = true;
     }

@@ -26,6 +26,9 @@ contract Punish is Params {
     event LogDecreaseMissedBlocksCounter();
     event LogPunishValidator(address indexed val, uint256 time);
 
+    event PunishRecordCleaned(address indexed validator);
+    event PunishValidatorRemoved(address indexed validator, uint256 index);
+
     modifier onlyNotPunished() {
         require(!punished[block.number], "Already punished");
         _;
@@ -110,10 +113,14 @@ contract Punish is Params {
     {
         if (punishRecords[val].missedBlocksCounter != 0) {
             punishRecords[val].missedBlocksCounter = 0;
+            emit PunishRecordCleaned(val);
         }
 
         // remove it out of array if exist
         if (punishRecords[val].exist && punishValidators.length > 0) {
+
+            uint256 index = punishRecords[val].index;
+            
             if (punishRecords[val].index != punishValidators.length - 1) {
                 address uval = punishValidators[punishValidators.length - 1];
                 punishValidators[punishRecords[val].index] = uval;
@@ -123,6 +130,8 @@ contract Punish is Params {
             punishValidators.pop();
             punishRecords[val].index = 0;
             punishRecords[val].exist = false;
+
+            emit PunishValidatorRemoved(val, index);
         }
 
         return true;

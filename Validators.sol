@@ -236,6 +236,9 @@ contract Validators is Params, Ownable {
 
     event withdrawStakingRewardEv(address user,address validator,uint reward,uint timeStamp);
 
+    event ContractCreatorSet(address indexed contractAddress, address indexed creator);
+    event Initialized(uint256 timestamp, address[] validators);
+    
     modifier onlyNotRewarded() {
         require(
             operationsDone[block.number][uint8(Operations.Distribute)] == false,
@@ -260,6 +263,7 @@ contract Validators is Params, Ownable {
     {
         require(contractCreator[_contract] == address(0), "invalid call");
         contractCreator[_contract] = tx.origin;
+        emit ContractCreatorSet(_contract, tx.origin);
         return true;
     }
 
@@ -286,6 +290,8 @@ contract Validators is Params, Ownable {
         }
         _updateGasSettings(30000, 25000, 100000000000 ether, 45000, 0);
         _updateParams(21, 32, 1000000);
+        
+        emit Initialized(block.timestamp, vals);
 
         initialized = true;
     }
@@ -324,7 +330,7 @@ contract Validators is Params, Ownable {
             require(staking >= MinimalStakingCoin,
             "Staking coins not enough");
         }
-        // stake at first time to this valiadtor
+        // stake at first time to this validator
         if (staked[staker][validator].coins == 0) {
             // add staker to validator's record list
             staked[staker][validator].index = valInfo.stakers.length;
