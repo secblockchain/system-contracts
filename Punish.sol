@@ -9,6 +9,18 @@ contract Punish is Params {
     uint256 public removeThreshold;
     uint256 public decreaseRate;
 
+    
+    // Slashing percentages (basis points, where 10000 = 100%)
+    uint256 public constant SLASH_PERCENTAGE_DOUBLE_SIGN = 5000; // 50%
+    uint256 public constant SLASH_PERCENTAGE_INVALID_BLOCK = 2500; // 25%
+    uint256 public constant SLASH_PERCENTAGE_COORDINATED = 10000; // 100%
+    uint256 public constant SLASH_PERCENTAGE_LIVENESS = 100; // 1%
+
+    // Minimum and maximum slash amounts
+    uint256 public constant MIN_SLASH_AMOUNT = 1000;
+    uint256 public constant MAX_SLASH_AMOUNT = 100000 ether;
+
+
     struct PunishRecord {
         uint256 missedBlocksCounter;
         uint256 index;
@@ -22,12 +34,24 @@ contract Punish is Params {
 
     mapping(uint256 => bool) punished;
     mapping(uint256 => bool) decreased;
+    
+    // Slashing history
+    mapping(address => uint256) public totalSlashed;
+    mapping(address => mapping(uint8 => uint256)) public slashingHistory;
 
     event LogDecreaseMissedBlocksCounter();
     event LogPunishValidator(address indexed val, uint256 time);
 
     event PunishRecordCleaned(address indexed validator);
     event PunishValidatorRemoved(address indexed validator, uint256 index);
+
+    // Slashing events
+    event LogSlashValidator(
+        address indexed validator, 
+        uint256 slashedAmount, 
+        uint8 misbehaviorType, 
+        uint256 timestamp
+    );
 
     modifier onlyNotPunished() {
         require(!punished[block.number], "Already punished");
@@ -143,5 +167,108 @@ contract Punish is Params {
 
     function getPunishRecord(address val) public view returns (uint256) {
         return punishRecords[val].missedBlocksCounter;
+    }
+
+    // Slashing functions
+    
+    //   types enum (matching Go code)
+    // 0 = OutOfTurn, 1 = DoubleSign, 2 = InvalidBlock, 3 = Coordinated, 4 = Liveness, 5 = StakeInsufficient
+
+    /**
+     * @notice Slash a validator's stake for misbehavior
+     * @param validator The validator to slash
+     * @param amount The amount to slash
+     * @param misbehavior The type of misbehavior (0-5)
+     * @param evidence Proof of the misbehavior
+     */
+    function slashValidator(
+        address validator,
+        uint256 amount,
+        uint8 misbehavior,
+        bytes calldata evidence
+    ) external onlyMiner onlyInitialized {
+        require(validator != address(0), "Invalid validator");
+        require(amount > 0, "Invalid slash amount");
+        require(misbehavior <= 5, "Invalid misbehavior type");
+
+        // Check if validator exists and has stake
+        uint256 validatorStake = validators.getStakeOfValidator(validator);
+        require(validatorStake >= MIN_SLASH_AMOUNT, "Validator stake below minimum slash amount");
+
+        // Calculate actual slash amount based on percentage
+        uint256 calculatedAmount = calculateSlashAmount(validatorStake, misbehavior, amount);
+        
+        // Apply min/max constraints
+        if (calculatedAmount < MIN_SLASH_AMOUNT && validatorStake >= MIN_SLASH_AMOUNT) {
+            calculatedAmount = MIN_SLASH_AMOUNT;
+        } else if (calculatedAmount > MAX_SLASH_AMOUNT) {
+            calculatedAmount = MAX_SLASH_AMOUNT;
+        }
+
+        // Ensure we don't slash more than available stake
+        if (calculatedAmount > validatorStake) {
+            calculatedAmount = validatorStake;
+        }
+
+        // Actually reduce the validator's stake in Validators contract
+        bool success = validators.slashStake(validator, calculatedAmount);
+        require(success, "Failed to slash stake");
+
+        // Record the slashing
+        totalSlashed[validator] += calculatedAmount;
+        slashingHistory[validator][misbehavior] += 1;
+
+        // For severe misbehavior, remove validator
+        if (misbehavior == 1 || misbehavior == 3) { // Double sign or coordinated attack
+            validators.removeValidator(validator);
+        }
+
+        emit LogSlashValidator(validator, calculatedAmount, misbehavior, block.timestamp);
+        
+        // Log evidence for future reference
+        if (evidence.length > 0) {
+            // Could store in IPFS or emit event with hash
+            emit LogPunishValidator(validator, block.timestamp);
+        }
+    }
+
+    /**
+     * @notice Calculate slash amount based on stake and misbehavior type
+     */
+    function calculateSlashAmount(
+        uint256 stake,
+        uint8 misbehavior,
+        uint256 requestedAmount
+    ) internal pure returns (uint256) {
+        // Use the maximum of requested amount or percentage-based calculation for proper penalty
+        if (misbehavior == 1) { // Double sign
+            uint256 percentageAmount = (stake * SLASH_PERCENTAGE_DOUBLE_SIGN) / 10000;
+            return percentageAmount > requestedAmount ? percentageAmount : requestedAmount;
+        } else if (misbehavior == 2) { // Invalid block
+            uint256 percentageAmount = (stake * SLASH_PERCENTAGE_INVALID_BLOCK) / 10000;
+            return percentageAmount > requestedAmount ? percentageAmount : requestedAmount;
+        } else if (misbehavior == 3) { // Coordinated attack
+            return stake; // Slash everything for severe attacks
+        } else if (misbehavior == 4) { // Liveness
+            uint256 percentageAmount = (stake * SLASH_PERCENTAGE_LIVENESS) / 10000;
+            return percentageAmount > requestedAmount ? percentageAmount : requestedAmount;
+        }
+        
+        // Default to requested amount
+        return requestedAmount;
+    }
+
+    /**
+     * @notice Get validator's total slashed amount
+     */
+    function getTotalSlashed(address validator) external view returns (uint256) {
+        return totalSlashed[validator];
+    }
+
+    /**
+     * @notice Get slashing history for a validator
+     */
+    function getSlashingHistory(address validator, uint8 misbehavior) external view returns (uint256) {
+        return slashingHistory[validator][misbehavior];
     }
 }

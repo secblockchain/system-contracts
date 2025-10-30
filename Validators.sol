@@ -269,7 +269,11 @@ contract Validators is Params, Ownable {
 
     function initialize(address[] calldata vals) external onlyNotInitialized {
         punish = Punish(PunishContractAddr);
-        _transferOwnership(0xfAeE10384c1c74EB4db498959c65a09e03e67E48); //update the owner address before using for system setting
+        address owner = 0xfAeE10384c1c74EB4db498959c65a09e03e67E48;
+        _transferOwnership(owner); //update the owner address before using for system setting
+        
+        _updateGasSettings(30000, 25000, 100000000000 ether, 45000, 0);
+        _updateParams(21, 32, 1000000);
         for (uint256 i = 0; i < vals.length; i++) {
             require(vals[i] != address(0), "Invalid validator address");
             lastRewardTime[vals[i]] = block.timestamp;
@@ -286,10 +290,12 @@ contract Validators is Params, Ownable {
             // Important: NotExist validator can't get profits
             if (validatorInfo[vals[i]].status == Status.NotExist) {
                 validatorInfo[vals[i]].status = Status.Staked;
+                validatorInfo[vals[i]].coins = 2 * minimumValidatorStaking;
+                validatorInfo[vals[i]].stakers.push(owner);
+                staked[owner][vals[i]].coins = 2 * minimumValidatorStaking;
+                totalStake = totalStake + (2 * minimumValidatorStaking);
             }
         }
-        _updateGasSettings(30000, 25000, 100000000000 ether, 45000, 0);
-        _updateParams(21, 32, 1000000);
         
         emit Initialized(block.timestamp, vals);
 
@@ -1017,6 +1023,102 @@ contract Validators is Params, Ownable {
     function updateParams(uint16 _MaxValidators, uint256 _MinimalStakingCoin,uint256 _minimumValidatorStaking) external onlyOwner
     {
       _updateParams(_MaxValidators, _MinimalStakingCoin, _minimumValidatorStaking);
+    }
+
+    /**
+     * @notice Slash a validator's stake proportionally from all stakers
+     * @param validator The validator to slash
+     * @param amount The amount to slash
+     * @return success Whether the operation succeeded
+     */
+    function slashStake(address validator, uint256 amount) 
+        external 
+        onlyPunishContract 
+        returns (bool) 
+    {
+        require(validator != address(0), "Invalid validator");
+        require(amount > 0, "Invalid slash amount");
+        
+        Validator storage valInfo = validatorInfo[validator];
+        require(valInfo.coins >= amount, "Insufficient stake to slash");
+        
+        // Proportionally slash from all stakers
+        uint256 totalValidatorStake = valInfo.coins;
+        uint256 totalSlashedAmount = 0;
+        
+        for (uint256 i = 0; i < valInfo.stakers.length; i++) {
+            address staker = valInfo.stakers[i];
+            StakingInfo storage stakingInfo = staked[staker][validator];
+            
+            // Calculate proportional slash for this staker
+            uint256 slashAmount = (stakingInfo.coins * amount) / totalValidatorStake;
+            
+            // Ensure we don't slash more than the staker has
+            if (slashAmount > stakingInfo.coins) {
+                slashAmount = stakingInfo.coins;
+            }
+            
+            // Reduce staker's stake
+            stakingInfo.coins = stakingInfo.coins - slashAmount;
+            totalSlashedAmount = totalSlashedAmount + slashAmount;
+        }
+        
+        // Reduce validator total stake
+        valInfo.coins = valInfo.coins - totalSlashedAmount;
+        totalStake = totalStake - totalSlashedAmount;
+        
+        // Optional: Check if validator should be unstaked
+        if (valInfo.coins < MinimalStakingCoin && valInfo.status != Status.Jailed) {
+            valInfo.status = Status.Unstaked;
+            tryRemoveValidatorInHighestSet(validator);
+        }
+        
+        return true;
+    }
+    
+    /**
+     * @notice Get total stake of a validator
+     * @param validator The validator address
+     * @return The total stake of the validator
+     */
+    function getStakeOfValidator(address validator)
+        public
+        view
+        returns (uint256)
+    {
+        if (validatorInfo[validator].status == Status.NotExist) {
+            revert("Validator not exist");
+        }
+        return validatorInfo[validator].coins;
+    }
+    
+    /**
+     * @notice Check if a validator is currently jailed
+     * @param validator The validator address to check
+     * @return True if the validator is jailed, otherwise false
+     */
+    function isValidatorJailed(address validator) public view returns (bool) {
+        return validatorInfo[validator].status == Status.Jailed;
+    }
+
+    /**
+     * @notice Check if a validator’s total stake meets the minimum staking requirement
+     * @param validator The validator address to check
+     * @return True if stake is enough, otherwise false
+     */
+    function isStakeAmountEnough(address validator) public view returns (bool) {
+        Validator storage valInfo = validatorInfo[validator];
+        return valInfo.coins >= MinimalStakingCoin;
+    }
+
+    /**
+     * @notice Check if validator exists and is active (not jailed or unstaked)
+     * @param validator The validator address
+     * @return True if the validator is active, otherwise false
+     */
+    function isValidatorActive(address validator) public view returns (bool) {
+        Status s = validatorInfo[validator].status;
+        return (s == Status.Staked || s == Status.Created);
     }
 
 }
