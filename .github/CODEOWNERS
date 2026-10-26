@@ -1,0 +1,42 @@
+# CODEOWNERS — secblockchain/system-contracts
+# Security owner(s) for this repository. Their review is required on any change
+# to dependency manifests, lockfiles, CI/CD, containers and this file.
+# Matches the "security-owner" custom property on the repository.
+# @SmartET2024 (CTO) is included on every repository for urgent merges.
+# Alerts: triage within 24h, resolve or escalate within 72h (team rule 6.1).
+
+# Dependencies — Node / JS / TS
+package.json              @alimurtazamemon @santo-smartenergypay @SmartET2024
+package-lock.json         @alimurtazamemon @santo-smartenergypay @SmartET2024
+yarn.lock                 @alimurtazamemon @santo-smartenergypay @SmartET2024
+pnpm-lock.yaml            @alimurtazamemon @santo-smartenergypay @SmartET2024
+bun.lockb                 @alimurtazamemon @santo-smartenergypay @SmartET2024
+.npmrc                    @alimurtazamemon @santo-smartenergypay @SmartET2024
+
+# Dependencies — Flutter / Dart / mobile
+pubspec.yaml              @alimurtazamemon @santo-smartenergypay @SmartET2024
+pubspec.lock              @alimurtazamemon @santo-smartenergypay @SmartET2024
+android/build.gradle      @alimurtazamemon @santo-smartenergypay @SmartET2024
+android/app/build.gradle  @alimurtazamemon @santo-smartenergypay @SmartET2024
+android/gradle/           @alimurtazamemon @santo-smartenergypay @SmartET2024
+ios/Podfile               @alimurtazamemon @santo-smartenergypay @SmartET2024
+ios/Podfile.lock          @alimurtazamemon @santo-smartenergypay @SmartET2024
+
+# Dependencies — Go / Rust / Python / Solidity
+go.mod                    @alimurtazamemon @santo-smartenergypay @SmartET2024
+go.sum                    @alimurtazamemon @santo-smartenergypay @SmartET2024
+Cargo.toml                @alimurtazamemon @santo-smartenergypay @SmartET2024
+Cargo.lock                @alimurtazamemon @santo-smartenergypay @SmartET2024
+requirements*.txt         @alimurtazamemon @santo-smartenergypay @SmartET2024
+pyproject.toml            @alimurtazamemon @santo-smartenergypay @SmartET2024
+poetry.lock               @alimurtazamemon @santo-smartenergypay @SmartET2024
+foundry.toml              @alimurtazamemon @santo-smartenergypay @SmartET2024
+remappings.txt            @alimurtazamemon @santo-smartenergypay @SmartET2024
+hardhat.config.*          @alimurtazamemon @santo-smartenergypay @SmartET2024
+
+# CI/CD, containers, infra
+.github/                  @alimurtazamemon @santo-smartenergypay @SmartET2024
+Dockerfile*               @alimurtazamemon @santo-smartenergypay @SmartET2024
+docker-compose*.yml       @alimurtazamemon @santo-smartenergypay @SmartET2024
+docker-compose*.yaml      @alimurtazamemon @santo-smartenergypay @SmartET2024
+.dockerignore             @alimurtazamemon @santo-smartenergypay @SmartET2024
